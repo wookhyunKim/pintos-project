@@ -1,0 +1,63 @@
+# 빌드 아티팩트 및 바이너리 파일
+*.o
+*.d
+*.out
+*.elf
+*.bin
+*.img
+*.hex
+
+# 실행 파일
+threads/build/*
+userprog/build/*
+vm/build/*
+filesys/build/*
+devices/build/*
+tests/*/build/*
+
+# 커널 디버그 파일
+kernel.bin
+loader.bin
+*.sym
+*.map
+
+# qemu 및 Bochs 로그 파일
+*.log
+*.lock
+*.tlg
+*.pcap
+*.out
+
+# 임시 파일 및 백업 파일
+*~
+\#*\#
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# 에디터 및 IDE 관련 파일
+.DS_Store
+.vscode/
+.idea/
+*.iml
+
+# GNU Global 태그 파일
+GTAGS
+GRTAGS
+GPATH
+
+# gdb 설정 파일
+.gdb_history
+.gdbinit
+
+# Pintos 디스크 이미지 파일
+*.disk
+*.swap
+
+# Test output
+tests/*.result
+tests/*.output
+tests/*.dump
+tests/*.diff
+
