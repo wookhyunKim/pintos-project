@@ -40,8 +40,8 @@ static struct lock tid_lock;
 /* Thread destruction requests */
 static struct list destruction_req;
 
-/* Statistics. */
-static long long idle_ticks;    /* # of timer ticks spent idle. */
+/* Statistics. */ //long long은 64비트 long보다 더 큰 범위의 값을 표현
+static long long idle_ticks;    /* # of timer ticks spent idle. */ 
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
