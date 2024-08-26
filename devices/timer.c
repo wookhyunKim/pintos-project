@@ -71,30 +71,38 @@ timer_calibrate (void) {
 }
 
 /* Returns the number of timer ticks since the OS booted. */
+// 운영 체제가 부팅된 이후 경과한 타이머 틱 수를 반환
 int64_t
 timer_ticks (void) {
-	enum intr_level old_level = intr_disable ();
-	int64_t t = ticks;
-	intr_set_level (old_level);
+	enum intr_level old_level = intr_disable (); // 인터럽트 비활성화해서 작업중 ticks 변수가 갱신 방지
+	int64_t t = ticks; // ticks 변수를 읽어서 t에 저장 ticks는 시스템 부팅된 이후 경과된 타이머 틱수를 나타내는 전역변수
+	intr_set_level (old_level); // 이전 인터럽트 상태를 복구
 	barrier ();
 	return t;
 }
 
 /* Returns the number of timer ticks elapsed since THEN, which
    should be a value once returned by timer_ticks(). */
+// then이라는 과거타이머 틱 값을 기준으로 현재까지 경과한 타이머 틱수 반환
 int64_t
 timer_elapsed (int64_t then) {
-	return timer_ticks () - then;
+	return timer_ticks () - then; // 현재 타이머틱수 - then = 경과한 타이머 틱수
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
+// 지정된 타이머 틱 수 만큼 실행을 일시 중단
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+	int64_t start = timer_ticks (); // 현재 타이머 틱수 start에 저장
 
-	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	ASSERT (intr_get_level () == INTR_ON); // 인터럽트가 활성화 되어있는지 검사, 꺼져있다면 커널 패닉
+
+	/* 기존 busy wait 방식 */
+	// while (timer_elapsed (start) < ticks) // ticks만큼의 시간이 경과할때까지 스레드 yield를 실행하는 반복문
+	//		thread_yield ();
+
+	/* busy wait보다 효율적인 방식 구현 */ 
+	thread_yield();
 }
 
 /* Suspends execution for approximately MS milliseconds. */
