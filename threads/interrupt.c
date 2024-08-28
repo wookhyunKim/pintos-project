@@ -129,6 +129,9 @@ intr_get_level (void) {
 enum intr_level
 intr_set_level (enum intr_level level) {
 	return level == INTR_ON ? intr_enable () : intr_disable ();
+	// `level` 값이 `INTR_ON`인지 확인하여, 그에 따라 인터럽트를 활성화하거나 비활성화합니다.
+    // `level == INTR_ON`이 참이면 `intr_enable()`을 호출하여 인터럽트를 활성화하고, 
+    // 그렇지 않으면 `intr_disable()`을 호출하여 인터럽트를 비활성화합니다.
 }
 
 /* Enables interrupts and returns the previous interrupt status. */

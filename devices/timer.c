@@ -94,15 +94,16 @@ timer_elapsed (int64_t then) {
 void
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks (); // 현재 타이머 틱수 start에 저장
+	if (ticks <= 0) return;
 
 	ASSERT (intr_get_level () == INTR_ON); // 인터럽트가 활성화 되어있는지 검사, 꺼져있다면 커널 패닉
 
 	/* 기존 busy wait 방식 */
 	// while (timer_elapsed (start) < ticks) // ticks만큼의 시간이 경과할때까지 스레드 yield를 실행하는 반복문
-	//		thread_yield ();
+	// 	thread_yield ();
 
-	/* busy wait보다 효율적인 방식 구현 */ 
-	thread_yield();
+	/* project 1:  busy wait보다 효율적인 방식 구현 */ 
+	thread_sleep(ticks+start); // tickd
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -133,7 +134,9 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	thread_tick ();
+	/* porject1: awake 함수 사용*/
+	thread_awake(ticks);
+	thread_tick ();		
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

@@ -30,9 +30,11 @@
    that are ready to run but not actually running. */
 // 실행 준비된 프로세스(실행 전)
 static struct list ready_list;
+// Project1 구현:  block된 스레드 담을 리스트 
+static struct list wait_list;
 
 /* Idle thread. */
-// 유휴 상태 표시용
+// 유휴 상태 표시하는 idle 스레드
 static struct thread *idle_thread;
 
 /* Initial thread, the thread running init.c:main(). */
@@ -97,6 +99,7 @@ static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
 
    It is not safe to call thread_current() until this function
    finishes. */
+// 스레딩 시스템을 초기화하는 함수
 void
 thread_init (void) {
 	ASSERT (intr_get_level () == INTR_OFF); // 인터럽트 비활성화 확인
@@ -114,21 +117,24 @@ thread_init (void) {
 	lock_init (&tid_lock); // 스레드 ID(tid) 할당을 위한 락을 초기화
 	list_init (&ready_list); // 실행 준비 완료된 스레드 리스트 초기화
 	list_init (&destruction_req); // 제거가 필요한 스레드 리스트 초기화
+	// Project1 구현: block 스레드 담을 wait 리스트 초기화
+	list_init (&wait_list);
 
 	/* Set up a thread structure for the running thread. */
-	initial_thread = running_thread (); // 현재 실행중인 스레드를 초시 스레드로 설정
+	initial_thread = running_thread (); // 현재 실행중인 스레드를 초기 스레드로 설정
 	init_thread (initial_thread, "main", PRI_DEFAULT); // 실행중인 스레드를 main, default순위로 초기화
-	initial_thread->status = THREAD_RUNNING;// 초기 스레드의 상태를 Tread Running으로 설정
+	initial_thread->status = THREAD_RUNNING;// 초기 스레드의 상태를 Running으로 설정
 	initial_thread->tid = allocate_tid (); // 초기 스레드에 고유 스레드 ID를 할당
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
+// 스레딩 시스템을 시작하는 함수
 void
 thread_start (void) {
 	/* Create the idle thread. */
 	struct semaphore idle_started; // idle 스레드
-	sema_init (&idle_started, 0); // 0으로 설정하여 대기상태로 만들기
+	sema_init (&idle_started, 0); // 세마포어를 0으로 설정하여, 세마포어가 처음엔 사용불가능한 상태
 	thread_create ("idle", PRI_MIN, idle, &idle_started); // 우선 순위 idle 스레드 생성
 
 	/* Start preemptive thread scheduling. 
@@ -137,12 +143,13 @@ thread_start (void) {
 
 	/* Wait for the idle thread to initialize idle_thread.
 		idle 스레드가 초기화 완료할 때까지 down(대기) */
-	sema_down (&idle_started); // idle 스레드가 세마포어 증가시킬때까지 대기
+	sema_down (&idle_started); // idle 스레드가 세마포어 증가시킬때까지 현재 스레드를 대기(블록)
 }
 
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context.
    타이머 틱마다 타이머 인터럽트 핸들러 호출, 외부 인터럽트 컨텍스트에서 실행됨 */
+// 인터럽트 처리가 완료된 후 스케줄러가 다른 프로세스를 실행할 수 있도록 하는 것
 void
 thread_tick (void) {
 	struct thread *t = thread_current (); // 실행 중인 스레드 포인터 가져오기
@@ -158,8 +165,6 @@ thread_tick (void) {
 #endif
 	else
 		kernel_ticks++;
-	// USERPROG가 정의된 경우, 현재 스레드가 사용자 프로그램이라면 user_ticks를 증가시킴.
-    // 이는 사용자 모드에서 실행된 시간의 통계를 유지하기 위함.
 	/* Enforce preemption. */
 	if (++thread_ticks >= TIME_SLICE)
 		intr_yield_on_return ();
@@ -223,9 +228,54 @@ thread_create (const char *name, int priority,
 	t->tf.eflags = FLAG_IF; // `eflags` 레지스터에서 인터럽트 플래그(FLAG_IF)를 설정하여 인터럽트를 활성화.
 
 	/* Add to run queue. */
-	thread_unblock (t); // 새로 생성된 스레드를 준비큐에 추가하여 실행될 수 있도록 많듦
+	thread_unblock (t); // 새로 생성된 스레드를 ready 큐에 추가하여 실행될 수 있도록 만듦
 
 	return tid; // 새로 생성된 스레드의 ID를 반환
+}
+
+/* project1 구현: value_less */
+bool
+value_less (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  
+  return a->sleep_time < b->sleep_time;
+}
+
+/* project1 구현: sleep */
+void
+thread_sleep(int64_t sleep_time) {
+	// 인터럽트 비활성화 위치 변경
+	enum intr_level old_level;
+	old_level = intr_disable(); // 인터럽트 비활성화(아래 코드의 atomicity)
+
+	struct thread *curr = thread_current();
+	// sleep_time에 timer_sleep의 tick + start 넣어줌
+	curr->sleep_time = sleep_time; // +timer_ticks 삭제
+
+	// wait_list에 넣기 curr->elem에 sleep_time도 함께 들어갈 듯
+	list_insert_ordered(&wait_list, &curr->elem, value_less, NULL); 
+	thread_block(); // 쓰레드 status blocked로 바꾸기
+
+	intr_set_level(old_level); // 인터럽트 원상복구
+}
+
+/* project1 구현: wake */
+void
+thread_awake(int64_t current_time) {
+	while(!list_empty(&wait_list)) { // wait_list가 비어있지 않을 때
+		struct list_elem *e = list_front(&wait_list);
+   		struct thread *t = list_entry(e, struct thread, elem);
+
+		if(current_time - t->sleep_time < 0) { // 현재 시간 < 깨울 시간 = 깨우지말고 break
+			break;
+		}
+
+		list_pop_front(&wait_list); // wait_list에서 pop
+		thread_unblock(t); // 다시 언블록 후 ready_list로 
+	}
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -259,11 +309,12 @@ thread_unblock (struct thread *t) {
 
 	ASSERT (is_thread (t)); // t가 유효한 스레드 객체인지 확인
 
-	old_level = intr_disable (); // 현제 인터럽트 상태를 저장하고 인터럽트 비활 성화
+	old_level = intr_disable (); // 현제 인터럽트 상태를 저장하고 인터럽트 비활성화
 	ASSERT (t->status == THREAD_BLOCKED); // 스레드 t가 블로킹 상태인지 확인
 	list_push_back (&ready_list, &t->elem); // 스레드를 준비큐의 끝으로 추가
 	t->status = THREAD_READY; // t의 상태를 THREAD_READY로 변경
 	intr_set_level (old_level); // 원래 인터럽트 상태로 복원
+}
 
 /* Returns the name of the running thread. */
 const char *
@@ -317,6 +368,7 @@ thread_exit (void) {
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim.
    CPU 양도, 현재 스레드는 sleep에 들어가지 안으며 스케줄러의 결정에 따라 즉시 실행가능 */
+// 현재 실행중인 스레드가 CPU를 양보하고 다른 스레드에게 실행기회를 주는 함수
 void
 thread_yield (void) {
 	struct thread *curr = thread_current (); // 현재 실행 중인 스레드의 포인터를 가져옴
@@ -448,6 +500,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *); // 스택포인터의 끝을 구조체의 끝으로 설정
 	t->priority = priority; // 우선순위 설정
 	t->magic = THREAD_MAGIC; // 스레드 magic값을 설정하여 구조체의 유효성을 확인
+	// project 1 : sleep_time 추가했으니 0으로 초기화
+	t->sleep_time = 0; 
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -574,6 +628,7 @@ thread_launch (struct thread *th) {
  * 함수의 상태를 status로 변경 후
  * 다른 스레드를 찾아 실행하고 그 스레드로 전환
  * schedule 함수에서 printf 호출은 안전하지 않음*/
+// 현재 스레드의 상태를 변경하고, 파괴 요처오딘 스레드를 정리한 후 새로운 스케줄링 시작하는 함수
 static void
 do_schedule(int status) {
 	ASSERT (intr_get_level () == INTR_OFF); // 인터럽트가 비활성화인지 확인
@@ -587,6 +642,7 @@ do_schedule(int status) {
 	schedule ();
 }
 
+// 다음에 실행할 스레드를 선택하고, 필요한 상태 검사 및 초기화 수행 후 실제 스레드 전환을 수행하는 함수
 static void
 schedule (void) {
 	struct thread *curr = running_thread (); // 현재 실행 중인 스레드를 가져옴
