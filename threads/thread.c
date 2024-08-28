@@ -235,13 +235,14 @@ thread_create (const char *name, int priority,
 
 /* project1 구현: value_less */
 bool
-value_less (const struct list_elem *a_, const struct list_elem *b_,
-            void *aux UNUSED) 
-{
-  const struct thread *a = list_entry (a_, struct thread, elem);
-  const struct thread *b = list_entry (b_, struct thread, elem);
-  
-  return a->sleep_time < b->sleep_time;
+value_less (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED) {
+	const struct thread *a = list_entry (a_, struct thread, elem);
+	const struct thread *b = list_entry (b_, struct thread, elem);
+	if(a->priority == b->priority) { // 우선 순위가 같을 떄는 sleep_time이 작을수록 앞으로 배치
+		return a->sleep_time < b->sleep_time;
+	}
+	return a->priority > b->priority; // 우선순위 높을 수록 우선순위이며 리스트 앞으로 배치
+	
 }
 
 /* project1 구현: sleep */
