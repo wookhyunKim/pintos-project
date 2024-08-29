@@ -197,7 +197,9 @@ list_push_front (struct list *list, struct list_elem *elem) {
 }
 
 /* Inserts ELEM at the end of LIST, so that it becomes the
-   back in LIST. */
+   back in LIST. 
+   주어진 element를 list의 끝에 추가
+   */
 void
 list_push_back (struct list *list, struct list_elem *elem) {
 	list_insert (list_end (list), elem);

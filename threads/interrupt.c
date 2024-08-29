@@ -149,14 +149,14 @@ intr_enable (void) {
 /* Disables interrupts and returns the previous interrupt status. */
 enum intr_level
 intr_disable (void) {
-	enum intr_level old_level = intr_get_level ();
+	enum intr_level old_level = intr_get_level (); // 현재 인터럽트 레벨을 old_level에 저장
 
 	/* Disable interrupts by clearing the interrupt flag.
 	   See [IA32-v2b] "CLI" and [IA32-v3a] 5.8.1 "Masking Maskable
 	   Hardware Interrupts". */
 	asm volatile ("cli" : : : "memory");
 
-	return old_level;
+	return old_level; // 이전 인터럽트 레벨 반환
 }
 
 /* Initializes the interrupt system. */
