@@ -95,6 +95,9 @@ struct thread {
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
+	int original_priority;  // before donated priority
+	int64_t t_ticks;        // to sleep time
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -122,6 +125,14 @@ void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
+
+// ============================================================
+bool comparing_ticks(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
+bool comparing_priority(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
+void running_to_blocked (int64_t ticks);
+void blocked_to_ready(int64_t current_ticks);
+bool context_switching_possible(void);
+// ============================================================
 
 void thread_block (void);
 void thread_unblock (struct thread *);

@@ -28,6 +28,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+// List of processes in THREAD_BLOCK state
+static struct list blocked_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -108,6 +111,7 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&blocked_list);
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -207,6 +211,10 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	if(thread_current()->priority < priority){
+		thread_yield();
+	}
+
 	return tid;
 }
 
@@ -240,7 +248,7 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	list_insert_ordered (&ready_list, &t->elem, comparing_priority ,NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -303,7 +311,7 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+		list_insert_ordered (&ready_list, &curr->elem, comparing_priority ,NULL);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -312,6 +320,7 @@ thread_yield (void) {
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
+	thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -409,6 +418,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	t->original_priority = priority;
+	t->t_ticks = 0;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -567,7 +578,8 @@ schedule (void) {
 		   schedule(). */
 		if (curr && curr->status == THREAD_DYING && curr != initial_thread) {
 			ASSERT (curr != next);
-			list_push_back (&destruction_req, &curr->elem);
+			// list_push_back (&destruction_req, &curr->elem);
+			list_insert_ordered (&destruction_req, &curr->elem, comparing_priority ,NULL);
 		}
 
 		/* Before switching the thread, we first save the information
@@ -587,4 +599,65 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+
+
+// ===============================================================================
+// alarm 
+
+// 두 스레드를 비교하여, 어느 스레드가 더 먼저 깨어나야 하는지를 판단하는 함수
+bool  comparing_ticks(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED)
+{
+	struct thread *st_a = list_entry(a, struct thread, elem);
+	struct thread *st_b = list_entry(b, struct thread, elem);
+	return st_a->t_ticks < st_b->t_ticks;
+}
+
+// 두 스레드를 비교하여, 어느 스레드가 더 먼저 깨어나야 하는지를 판단하는 함수
+bool  comparing_priority(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED)
+{
+	struct thread *st_a = list_entry(a, struct thread, elem);
+	struct thread *st_b = list_entry(b, struct thread, elem);
+	return st_a->priority > st_b->priority;
+}
+// OS 의 인터럽트를 받아 running thread를 block 하는 함수
+void running_to_blocked (int64_t ticks) {
+	struct thread *curr = thread_current ();
+	enum intr_level old_level;
+
+	ASSERT (!intr_context ());
+	old_level = intr_disable ();
+	curr->t_ticks = ticks;
+	if (curr != idle_thread)
+		list_insert_ordered (&blocked_list, &curr->elem, comparing_ticks ,NULL);
+		thread_block();
+	intr_set_level (old_level);
+}
+
+
+void blocked_to_ready(int64_t current_ticks)
+{
+	enum intr_level old_level;
+	old_level = intr_disable(); // 인터럽트 비활성
+
+	struct list_elem *curr_elem = list_begin(&blocked_list);
+	while (curr_elem != list_end(&blocked_list))
+	{
+		struct thread *curr_thread = list_entry(curr_elem, struct thread, elem); // 현재 검사중인 elem의 스레드
+
+		if (current_ticks >= curr_thread->t_ticks) // 깰 시간이 됐으면
+		{
+			curr_elem = list_remove(curr_elem); // sleep_list에서 제거, curr_elem에는 다음 elem이 담김
+			thread_unblock(curr_thread);        // ready_list로 이동
+		}
+		else
+			break;
+	}
+	intr_set_level(old_level); // 인터럽트 상태를 원래 상태로 변경
+}
+
+
+bool context_switching_possible(void){
+	return thread_current()->priority <= list_entry(list_begin(&ready_list),struct thread,elem)->priority;
 }
