@@ -230,6 +230,11 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t); // 새로 생성된 스레드를 ready 큐에 추가하여 실행될 수 있도록 만듦
 
+	// 생성 시 우선 순위를 비교해서 러닝 쓰레드 우선순위보다 새로 생성된 쓰레드의 우선 순위가 높을시 컨텍스트 스위칭(thread_yield)
+	if(thread_current()->priority < priority) {
+		thread_yield();
+	}
+
 	return tid; // 새로 생성된 스레드의 ID를 반환s
 }
 
@@ -317,9 +322,9 @@ thread_unblock (struct thread *t) {
 	ASSERT (t->status == THREAD_BLOCKED); // 스레드 t가 블로킹 상태인지 확인
 	list_insert_ordered(&ready_list, &t->elem, priority_desc, NULL); // ready 리스트에 넣어줌 priority를 기준으로 정렬
 	t->status = THREAD_READY; // t의 상태를 THREAD_READY로 변경
-	if(thread_current() != idle_thread && thread_get_priority() < t->priority) { // priority를 확인해서 thread_yield
-		thread_yield();
-	}
+	// if(thread_current() != idle_thread && thread_get_priority() < t->priority) { // priority를 확인해서 thread_yield
+	// 	thread_yield();
+	// }
 	intr_set_level (old_level); // 원래 인터럽트 상태로 복원
 }
 
@@ -395,10 +400,10 @@ void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority; // priority 갱신 후
 
-	/* 조건문 추가해야함 */
 	/* priority_change를 위해서 컨텍스트 스위칭이 일어나야하기 때문에 yield 추가 */
-	thread_yield();
-
+	if (thread_get_priority() < list_entry(list_begin(&ready_list), struct thread, elem)->priority) {
+		thread_yield();
+	}
 }
 
 /* Returns the current thread's priority. */

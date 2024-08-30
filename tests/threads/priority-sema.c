@@ -21,7 +21,7 @@ test_priority_sema (void)
   ASSERT (!thread_mlfqs);
 
   sema_init (&sema, 0);
-  thread_set_priority (PRI_MIN);
+  thread_set_priority (PRI_MIN); // 쓰레드 가장 낮은 우선순위(0)로 설정
   for (i = 0; i < 10; i++) 
     {
       int priority = PRI_DEFAULT - (i + 3) % 10 - 1;
@@ -33,6 +33,7 @@ test_priority_sema (void)
   for (i = 0; i < 10; i++) 
     {
       sema_up (&sema);
+      thread_yield();
       msg ("Back in main thread."); 
     }
 }

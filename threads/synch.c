@@ -41,12 +41,13 @@
 
    - up or "V": increment the value (and wake up one waiting
    thread, if any). */
+// 세마포어 구조체 sema를 value값으로 초기화
 void
 sema_init (struct semaphore *sema, unsigned value) {
 	ASSERT (sema != NULL);
 
-	sema->value = value;
-	list_init (&sema->waiters);
+	sema->value = value; // 부호없는 정수형 저장
+	list_init (&sema->waiters); // wait list 생성
 }
 
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
@@ -57,6 +58,16 @@ sema_init (struct semaphore *sema, unsigned value) {
    interrupts disabled, but if it sleeps then the next scheduled
    thread will probably turn interrupts back on. This is
    sema_down function. */
+// “Down” or “P” 연산을 sema에 실행, sema값이 양수가 되면 1만큼 빼기
+
+// 우선순위 정렬 함수 추가
+bool
+sema_priority_desc (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED) {
+	const struct thread *a = list_entry (a_, struct thread, elem);
+	const struct thread *b = list_entry (b_, struct thread, elem);
+	return a->priority > b->priority; // 우선순위 높을 수록 우선순위이며 리스트 앞으로 배치
+}
+
 void
 sema_down (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -66,7 +77,12 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		// 원래 코드
+		// list_push_back (&sema->waiters, &thread_current ()->elem);
+
+		// project1: 구현
+		// sema waiter list가 priority로 ordered되도록 바꾸기
+		list_insert_ordered(&sema->waiters, &thread_current()->elem, sema_priority_desc, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -78,6 +94,7 @@ sema_down (struct semaphore *sema) {
    decremented, false otherwise.
 
    This function may be called from an interrupt handler. */
+// “Down” or “P” 연산을 기다리지않고 시도함, 성공적으로 감소하면 true, 0이었으면 false 리턴(비효율적)
 bool
 sema_try_down (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -102,6 +119,7 @@ sema_try_down (struct semaphore *sema) {
    and wakes up one thread of those waiting for SEMA, if any.
 
    This function may be called from an interrupt handler. */
+//  “Up” or “V” sema값을 증가시키는 연산 실행, 만약에 sema가 기다리는 쓰레드가 있다면 깨우기
 void
 sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
