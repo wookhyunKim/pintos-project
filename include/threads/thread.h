@@ -27,6 +27,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define PRI_DNTD_INIT -1
 
 /* A kernel thread or user process.
  *
@@ -91,11 +92,13 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	// project 1: sleep_time 추가
+	// project1: sleep_time 추가
 	int64_t sleep_time;                 /* Sleep time(for checking wake time) */
-
+	// project1: old_priority 추가
+	int donated_priority;         
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

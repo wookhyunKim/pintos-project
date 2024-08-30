@@ -127,10 +127,11 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
-	if (!list_empty (&sema->waiters))
+	sema->value++;
+	if (!list_empty (&sema->waiters)) 
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
-	sema->value++;
+		
 	intr_set_level (old_level);
 }
 
@@ -206,6 +207,12 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	// struct thread *holder_thread = lock->holder;
+	/* 뭐 할래?? => donation !!! */
+	if(lock->holder != NULL && lock->holder->priority < thread_get_priority())
+		lock->holder->donated_priority = thread_get_priority();
+	
+
 	sema_down (&lock->semaphore);
 	lock->holder = thread_current ();
 }
@@ -239,6 +246,12 @@ void
 lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
+
+	// struct thread *holder_thread = lock->holder;
+	/* 뭐 할래?? */
+	if(lock->holder->donated_priority != PRI_DNTD_INIT) {
+		lock->holder->donated_priority = PRI_DNTD_INIT;
+	}
 
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
