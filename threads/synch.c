@@ -57,8 +57,11 @@ sema_init (struct semaphore *sema, unsigned value) {
    interrupts disabled, but if it sleeps then the next scheduled
    thread will probably turn interrupts back on. This is
    sema_down function. */
-void
-sema_down (struct semaphore *sema) {
+/* 
+sema 값이 0이면 실행중인 스레드를 sema waiters에 우선순위에따라 넣음. 그리고 BLOCK상태로 만들고 스케줄 진행  
+sema 값이 0이 아니면 무한루프를 탈출해서 sema값을 줄이고 함수를 리턴함.
+*/
+void sema_down (struct semaphore *sema) {
 	enum intr_level old_level;
 
 	ASSERT (sema != NULL);
@@ -102,18 +105,22 @@ sema_try_down (struct semaphore *sema) {
    and wakes up one thread of those waiting for SEMA, if any.
 
    This function may be called from an interrupt handler. */
-void
-sema_up (struct semaphore *sema) {
+/*
+sema waiters가 비어있지 않으면 sema waiters에서 앞에 것을 하나 pop하고 그 스레드로 unblock실행
+이는 pop한 스레드를 우선순위에 따라 정렬함.
+이후 sema +1 해주고 실행중인스레드의 우선순위가 ready_list의 첫번째스레드 우선순위보다 작으면 yield실행
+*/
+void sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
 
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters)){
+      list_sort(&sema->waiters,comparing_priority,NULL);
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),struct thread, elem));
 	}
 	sema->value++;	
-	// test_max_priority();
 	if(context_switching_possible()){
 		thread_yield();
 	}
@@ -192,7 +199,25 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+   THREAD *curr = thread_current();
+
+	if(lock->holder){
+		//현재 스레드가 어떤 lock을 기다리는지 추가
+		curr->wait_lock = lock;
+
+		//holder의 donation 리스트에 현재 스레드를 우선순위 기준으로 내림차순 정렬하여 추가
+		list_insert_ordered(&lock->holder->donation_list,&curr->donation_elem,comparing_priority,NULL);
+		
+		//현재 스레드부터 wait_on_lock을 확인하여 priority를 donate한다(nested priority일 가능성 고려)
+		donate_priority();
+	}
+
 	sema_down (&lock->semaphore);
+
+   	////////////// lock 관련해서 수정 ///////////////
+	//down을 했다면 lock을 획득했다는 것이므로 wait_on_lock(현재 스레드가 기다리는 lock)을 NULL로 바꾼다
+	curr->wait_lock = NULL;
+
 	lock->holder = thread_current ();
 }
 
@@ -226,7 +251,10 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
-	// thread_current()->priority = thread_current()->original_priority;
+	//lock을 release할 때, 해제할 lock을 기다리는 스레드들을 donation 리스트에서 제거한다
+	remove_from_donation_list(lock);
+	//donation 리스트가 변동되었으니,우선순위를 재설정한다
+	refresh_priority();
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
 }
