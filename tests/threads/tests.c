@@ -11,14 +11,14 @@ struct test
 
 static const struct test tests[] = 
   {
-    {"alarm-single", test_alarm_single}, // non-pass
+    {"alarm-single", test_alarm_single}, // pass
     {"alarm-multiple", test_alarm_multiple}, // pass
     {"alarm-simultaneous", test_alarm_simultaneous}, // pass
     {"alarm-priority", test_alarm_priority}, // pass
     {"alarm-zero", test_alarm_zero}, // pass
     {"alarm-negative", test_alarm_negative}, // pass
     {"priority-change", test_priority_change}, // pass
-    {"priority-donate-one", test_priority_donate_one}, // non-pass
+    {"priority-donate-one", test_priority_donate_one}, // pass
     {"priority-donate-multiple", test_priority_donate_multiple}, // non-pass
     {"priority-donate-multiple2", test_priority_donate_multiple2}, // non-pass
     {"priority-donate-nest", test_priority_donate_nest}, // non-pass

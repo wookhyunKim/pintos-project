@@ -69,9 +69,6 @@ sema_down (struct semaphore *sema) {
 		list_insert_ordered (&sema->waiters, &thread_current()->elem, comparing_priority ,NULL);
 		thread_block ();
 	}
-	if(context_switching_possible()){
-		thread_yield();
-	}
 	sema->value--;
 	intr_set_level (old_level);
 }
@@ -114,9 +111,12 @@ sema_up (struct semaphore *sema) {
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters)){
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),struct thread, elem));
-		// context_switching 필요
 	}
 	sema->value++;	
+	// test_max_priority();
+	if(context_switching_possible()){
+		thread_yield();
+	}
 	intr_set_level (old_level);
 }
 
@@ -226,6 +226,7 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
+	// thread_current()->priority = thread_current()->original_priority;
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
 }
@@ -276,20 +277,20 @@ cond_init (struct condition *cond) {
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
-void
-cond_wait (struct condition *cond, struct lock *lock) {
-	struct semaphore_elem waiter;
+void cond_wait(struct condition *cond, struct lock *lock) {
+    struct semaphore_elem waiter;
 
-	ASSERT (cond != NULL);
-	ASSERT (lock != NULL);
-	ASSERT (!intr_context ());
-	ASSERT (lock_held_by_current_thread (lock));
+    ASSERT(cond != NULL);
+    ASSERT(lock != NULL);
+    ASSERT(!intr_context());
+    ASSERT(lock_held_by_current_thread(lock));
 
-	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
-	lock_release (lock);
-	sema_down (&waiter.semaphore);
-	lock_acquire (lock);
+    sema_init(&waiter.semaphore, 0);
+    /** #Priority Scheduling - Synchronization sema_priority 순서대로 waiters에 삽입  */
+    list_insert_ordered(&cond->waiters, &waiter.elem, cmp_sem_priority, NULL);
+    lock_release(lock);
+    sema_down(&waiter.semaphore);
+    lock_acquire(lock);
 }
 
 /* If any threads are waiting on COND (protected by LOCK), then
@@ -299,16 +300,17 @@ cond_wait (struct condition *cond, struct lock *lock) {
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to signal a condition variable within an
    interrupt handler. */
-void
-cond_signal (struct condition *cond, struct lock *lock UNUSED) {
-	ASSERT (cond != NULL);
-	ASSERT (lock != NULL);
-	ASSERT (!intr_context ());
-	ASSERT (lock_held_by_current_thread (lock));
+void cond_signal(struct condition *cond, struct lock *lock UNUSED) {
+    ASSERT(cond != NULL);
+    ASSERT(lock != NULL);
+    ASSERT(!intr_context());
+    ASSERT(lock_held_by_current_thread(lock));
 
-	if (!list_empty (&cond->waiters))
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+    if (!list_empty(&cond->waiters)) {
+        /** #Priority Scheduling - Synchronization sema_priority 순서대로 재정렬  */
+        list_sort(&cond->waiters, cmp_sem_priority, NULL);
+        sema_up(&list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem)->semaphore);
+    }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -324,4 +326,27 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 	while (!list_empty (&cond->waiters))
 		cond_signal (cond, lock);
+}
+
+/** #Priority Scheduling - Synchronization 첫 번째 인자의 우선순위가 두 번째 인자의 우선순위보다 높으면 1, 아니면 0을 반환 */
+bool cmp_sem_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    struct semaphore_elem *sema_a = list_entry(a, struct semaphore_elem, elem);
+    struct semaphore_elem *sema_b = list_entry(b, struct semaphore_elem, elem);
+
+    if (sema_a == NULL || sema_b == NULL)
+        return false;
+
+    struct list *list_a = &(sema_a->semaphore.waiters);
+    struct list *list_b = &(sema_b->semaphore.waiters);
+
+    if (list_a == NULL || list_b == NULL)
+        return false;
+
+    struct thread *thread_a = list_entry(list_begin(list_a), struct thread, elem);
+    struct thread *thread_b = list_entry(list_begin(list_b), struct thread, elem);
+
+    if (thread_a == NULL || thread_b == NULL)
+        return false;
+
+    return thread_a->priority > thread_b->priority;
 }

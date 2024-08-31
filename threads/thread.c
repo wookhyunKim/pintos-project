@@ -212,6 +212,7 @@ thread_create (const char *name, int priority,
 	thread_unblock (t);
 
 	if(thread_current()->priority < priority){
+		// thread_current()->priority = priority;
 		thread_yield();
 	}
 
@@ -310,8 +311,9 @@ thread_yield (void) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
-	if (curr != idle_thread)
+	if (curr != idle_thread){
 		list_insert_ordered (&ready_list, &curr->elem, comparing_priority ,NULL);
+	}
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -319,8 +321,12 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
+	
 	thread_current ()->priority = new_priority;
+	thread_current ()->original_priority = new_priority;
 	thread_yield();
+	
+
 }
 
 /* Returns the current thread's priority. */
@@ -554,6 +560,10 @@ schedule (void) {
 	struct thread *curr = running_thread ();
 	struct thread *next = next_thread_to_run ();
 
+	// if(curr->priority < next->priority){
+	// 	curr->priority = next->priority;
+	// }
+
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (curr->status != THREAD_RUNNING);
 	ASSERT (is_thread (next));
@@ -659,5 +669,9 @@ void blocked_to_ready(int64_t current_ticks)
 
 
 bool context_switching_possible(void){
+	if (list_empty(&ready_list)){
+		return false;
+	}
+	
 	return thread_current()->priority <= list_entry(list_begin(&ready_list),struct thread,elem)->priority;
 }
