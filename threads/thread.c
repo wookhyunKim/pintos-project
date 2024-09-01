@@ -701,6 +701,11 @@ bool context_switching_possible(void)
 }
 
 /* donation list에 스레드가 있으면 가장 높은 우선순위 스레드의 우선순위 빌리고, 아니면 우선순위 복귀 */
+/*
+ donation 리스트가 변동되었음, 따라서 현재 스레드의 우선순위를 초기우선순위로 반환하고
+ 현재 스레드의 donation_list를 우선순위로 정렬하여 처음의 스레드를 가지고 현재 스레드 우선순위와 
+ 비교하여 처음스레드가 더 크면 기부해준다.
+*/
 void refresh_priority(void)
 {
 	struct thread *cur = thread_current();
@@ -709,7 +714,7 @@ void refresh_priority(void)
 
 	if (!list_empty(&cur->donation_list))
 	{
-		list_sort(&cur->donation_list, comparing_priority, NULL);
+		// list_sort(&cur->donation_list, comparing_priority, NULL);
 
 		struct thread *front = list_entry(list_front(&cur->donation_list), THREAD, donation_elem);
 

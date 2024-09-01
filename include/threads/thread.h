@@ -97,7 +97,7 @@ typedef struct thread {
 
 	int64_t t_ticks;        // to sleep time
 	int original_priority;  // before donated priority
-	struct lock *wait_lock;         /* waiting lock */
+	struct lock *wait_lock;         /* lock which I need to get*/
     struct list donation_list;          /* Donation List. */
     struct list_elem donation_elem; /* Donation Element. */
 

@@ -41,8 +41,8 @@
 
    - up or "V": increment the value (and wake up one waiting
    thread, if any). */
-void
-sema_init (struct semaphore *sema, unsigned value) {
+// 세마포어를 0으로 초기화함.
+void sema_init (struct semaphore *sema, unsigned value) {
 	ASSERT (sema != NULL);
 
 	sema->value = value;
@@ -177,8 +177,8 @@ sema_test_helper (void *sema_) {
    acquire and release it.  When these restrictions prove
    onerous, it's a good sign that a semaphore should be used,
    instead of a lock. */
-void
-lock_init (struct lock *lock) {
+// lock의 세마포어 value를 1로 초기화함
+void lock_init (struct lock *lock) {
 	ASSERT (lock != NULL);
 
 	lock->holder = NULL;
@@ -193,20 +193,26 @@ lock_init (struct lock *lock) {
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
-void
-lock_acquire (struct lock *lock) {
+/* 
+인자로 받은 lock을 통해 sema down을 함. 만약 lock의 홀더 스레드가 있으면 실행중인 스레드가 인자 lock을
+기다린다고 해놓고, lock holder 스레드의 donation_list에 우선순위로 현재 스레드를 추가함.
+그리고 우선순위 기부를 진행한다. 이후 sema down을 진행함. (세마다운은 0일때 sema waiters에 스레드를 추가하는것.)
+이후 현재 스레드가 기다리는 lock을 NULL로 하고 lock을 현재 스레드가 가지도록 한다. 
+*/
+void lock_acquire (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
-   THREAD *curr = thread_current();
+   THREAD *t = thread_current();
 
+   // lock을 가진 스레드가 존재하면 
 	if(lock->holder){
-		//현재 스레드가 어떤 lock을 기다리는지 추가
-		curr->wait_lock = lock;
+		//현재 스레드가 어떤 lock을 기다리는지 추가  내가 얻길 원하는 lock 또는 풀리기를 기다리는 lock 
+		t->wait_lock = lock;
 
 		//holder의 donation 리스트에 현재 스레드를 우선순위 기준으로 내림차순 정렬하여 추가
-		list_insert_ordered(&lock->holder->donation_list,&curr->donation_elem,comparing_priority,NULL);
+		list_insert_ordered(&lock->holder->donation_list,&t->donation_elem,comparing_priority,NULL);
 		
 		//현재 스레드부터 wait_on_lock을 확인하여 priority를 donate한다(nested priority일 가능성 고려)
 		donate_priority();
@@ -216,7 +222,7 @@ lock_acquire (struct lock *lock) {
 
    	////////////// lock 관련해서 수정 ///////////////
 	//down을 했다면 lock을 획득했다는 것이므로 wait_on_lock(현재 스레드가 기다리는 lock)을 NULL로 바꾼다
-	curr->wait_lock = NULL;
+	t->wait_lock = NULL;
 
 	lock->holder = thread_current ();
 }
@@ -246,8 +252,13 @@ lock_try_acquire (struct lock *lock) {
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to release a lock within an interrupt
    handler. */
-void
-lock_release (struct lock *lock) {
+/*
+해제하려는 lock을 인자로 받음. remove from donation list를 실행하면
+인자의 lock를 필요로 하는 스레드가 donation list로 부터 제거된다.
+
+
+*/
+void lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
