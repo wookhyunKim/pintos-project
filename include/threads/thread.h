@@ -91,6 +91,9 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	
+	// project 1: alarm clock 구현
+	int16_t wakeup; // 깨어날 시간을 나타내는 변수
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
@@ -142,5 +145,10 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+// 함수 원형 선언
+// ticks -> 스레드가 깨어나야할 시간
+void thread_sleep(int64_t ticks); // 스레드를 슬립상태로 전환.
+void thread_awake(int64_t ticks); // 깨울 스레드를 깨우는 함수. ticks를 기준으로 깨워야 할 스레드 결정
 
 #endif /* threads/thread.h */

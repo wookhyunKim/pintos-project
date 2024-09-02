@@ -88,14 +88,14 @@ timer_elapsed (int64_t then) {
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
-void
-timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+// void
+// timer_sleep (int64_t ticks) {
+// 	int64_t start = timer_ticks ();
 
-	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
-}
+// 	ASSERT (intr_get_level () == INTR_ON);
+// 	while (timer_elapsed (start) < ticks)
+// 		thread_yield ();
+// }
 
 /* Suspends execution for approximately MS milliseconds. */
 void
@@ -123,9 +123,12 @@ timer_print_stats (void) {
 
 /* Timer interrupt handler. */
 static void
-timer_interrupt (struct intr_frame *args UNUSED) {
+timer_interrupt (struct intr_frame *args UNUSED) { // 시스템 틱 증가
 	ticks++;
 	thread_tick ();
+
+	// project 1: alarm clock 구현
+	thread_awake(ticks); // 매 타이머 인터럽트마다 깨워야 할 스레드 확인 및 깨우기
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -183,4 +186,13 @@ real_time_sleep (int64_t num, int32_t denom) {
 		ASSERT (denom % 1000 == 0);
 		busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
 	}
+}
+
+
+// project 1: alarm clock 구현
+void timer_sleep(int64_t ticks) // 스레드를 지정된 시간동안 재우는 함수
+{
+	int64_t start = timer_ticks();
+	ASSERT (intr_get_level () == INTR_ON);
+	thread_sleep(start + ticks); // 현재 시간 + 대기해야 할 시간(ticks)를 계산하여 thread_sleep 호출
 }
