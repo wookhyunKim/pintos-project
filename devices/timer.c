@@ -20,6 +20,11 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+/* 큐 안에 스레드가 cpu를 공평하게 사용하는지 나타내는 것 
+	평균을 구하는 방식이 계속 변하는 환경에 따른 적응을 포함하고 있어야 하기 때문에 이동평균 방식을 선택.
+ */
+static int64_t load_avg;
+
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -126,6 +131,18 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+	
+
+	int64_t now =  timer_ticks();
+	THREAD * t = thread_current();
+	thread_current()->recent_cpu++;
+	if (now % TIMER_FREQ == 0){
+		// 전역변수 load_avg
+		// load_avg = (59/60) * load_avg + (1/60) * ready_threads ; 
+		// load_avg = (59/60) * load_avg + (1/60) * list_size(&ready_list) ; 
+		t->recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * t->recent_cpu + t->nice ;
+		// 소수처리 func()
+	}
 	
 	blocked_to_ready(ticks);
 }

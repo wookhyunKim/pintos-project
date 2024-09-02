@@ -340,7 +340,13 @@ void thread_set_priority(int new_priority)
 /* Returns the current thread's priority. */
 int thread_get_priority(void)
 {
-	return thread_current()->priority;
+
+	THREAD * t = thread_current();
+	if(t->priority != t->original_priority){
+		return t->priority;
+
+	}	
+	return t->original_priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -443,6 +449,11 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->original_priority = priority;
 	t->wait_lock = NULL;
 	list_init(&t->donation_list);
+
+	// mlfqs 관련 변수
+	t->nice = 0;
+	t->recent_cpu = 0;
+
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

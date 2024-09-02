@@ -101,6 +101,10 @@ typedef struct thread {
     struct list donation_list;          /* Donation List. */
     struct list_elem donation_elem; /* Donation Element. */
 
+	int nice;  // when this thread yield CPU, this var effect. nice high > yield easy, nice low > yield hard
+	int recent_cpu ; // using CPU time
+
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
