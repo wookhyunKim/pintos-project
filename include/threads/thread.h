@@ -85,7 +85,7 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
-struct thread {
+typedef struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
@@ -94,6 +94,16 @@ struct thread {
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+
+	int64_t t_ticks;        // to sleep time
+	int original_priority;  // before donated priority
+	struct lock *wait_lock;         /* lock which I need to get*/
+    struct list donation_list;          /* Donation List. */
+    struct list_elem donation_elem; /* Donation Element. */
+
+	int nice;  // when this thread yield CPU, this var effect. nice high > yield easy, nice low > yield hard
+	int recent_cpu ; // using CPU time
+
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -107,7 +117,7 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
-};
+}THREAD;
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -122,6 +132,17 @@ void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
+
+// ============================================================
+bool comparing_ticks(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
+bool comparing_priority(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
+void running_to_blocked (int64_t ticks);
+void blocked_to_ready(int64_t current_ticks);
+bool context_switching_possible(void);
+void refresh_priority(void);
+void donate_priority(void);
+void remove_from_donation_list(struct lock *lock);
+// ============================================================
 
 void thread_block (void);
 void thread_unblock (struct thread *);
