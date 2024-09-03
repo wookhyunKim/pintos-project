@@ -32,6 +32,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+void donate_priority(struct lock *lock);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -68,6 +70,13 @@ sema_priority_desc (const struct list_elem *a_, const struct list_elem *b_, void
 	return a->priority > b->priority; // 우선순위 높을 수록 우선순위이며 리스트 앞으로 배치
 }
 
+bool
+lock_priority_desc (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED) {
+	const struct lock *a = list_entry (a_, struct lock, elem);
+	const struct lock *b = list_entry (b_, struct lock, elem);
+	return a->max_priority > b->max_priority; // 우선순위 높을 수록 우선순위이며 리스트 앞으로 배치
+}
+
 void
 sema_down (struct semaphore *sema) {
 	enum intr_level old_level;
@@ -81,7 +90,7 @@ sema_down (struct semaphore *sema) {
 		// list_push_back (&sema->waiters, &thread_current ()->elem);
 
 		// project1: 구현
-		// sema waiter list가 priority로 ordered되도록 바꾸기
+		// sema waiter list가 priority가 큰 순서로 insert_ordered되도록 바꾸기
 		list_insert_ordered(&sema->waiters, &thread_current()->elem, sema_priority_desc, NULL);
 		thread_block ();
 	}
@@ -127,11 +136,14 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
+	// sema 문제에서 첫번째 컨텍스트 스위칭이 안되는 이유 세마가 0이기 때문
+	// sema->value++의 위치를 옮겨서 thread_unblock이 일어나기전에 1로 만들어줌
 	sema->value++;
-	if (!list_empty (&sema->waiters)) 
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
-		
+	if (!list_empty (&sema->waiters)) {
+		thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
+		thread_check_yield();
+	}
+	// 원래 sema->value++; 위치
 	intr_set_level (old_level);
 }
 
@@ -191,6 +203,8 @@ lock_init (struct lock *lock) {
 
 	lock->holder = NULL;
 	sema_init (&lock->semaphore, 1);
+	// project1 priority-donate-multi: 
+	lock->max_priority = PRI_DNTD_INIT;
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -207,14 +221,51 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
-	// struct thread *holder_thread = lock->holder;
-	/* 뭐 할래?? => donation !!! */
-	if(lock->holder != NULL && lock->holder->priority < thread_get_priority())
-		lock->holder->donated_priority = thread_get_priority();
-	
+	thread_current()->wanted_lock = lock;
 
+	// 기부가 일어나고
+	donate_priority(lock);
+	
 	sema_down (&lock->semaphore);
+	
+	// 락획득 성공하면 쓰레드가 가진 락 리스트에 넣기
+	list_insert_ordered (&thread_current()->locks, &(lock->elem), lock_priority_desc, NULL);
 	lock->holder = thread_current ();
+	// 기부 후 wanted_lock 초기화
+	thread_current()->wanted_lock = NULL;
+}
+
+
+void 
+donate_priority(struct lock *lock) {
+	if (lock != NULL && lock->holder != NULL) {
+		struct thread *lock_holder = lock->holder;
+
+		// 현재 스레드의 우선순위가 lock의 max_priority보다 크면 업데이트
+		if (lock->max_priority < thread_get_priority()) {
+			lock->max_priority = thread_get_priority();
+
+			// lock을 보유한 스레드가 존재하고, 그 스레드의 우선순위가 현재 스레드보다 낮으면
+			if (thread_any_priority(lock_holder) < thread_get_priority()) {
+				// 우선순위 기부
+				lock_holder->donated_priority = thread_get_priority();
+
+				// 페이지 폴트 수정
+				if (!list_empty(&lock_holder->locks)) {
+					// lock_holder가 보유한 가장 높은 우선순위의 락이 현재 스레드의 우선순위보다 낮으면
+					if (list_entry(list_front(&lock_holder->locks), struct lock, elem)->max_priority < thread_get_priority()) {
+						// 락 리스트에서 현재 락을 제거하고 다시 정렬된 위치에 삽입
+						list_remove(&lock->elem);
+						list_insert_ordered(&lock_holder->locks, &lock->elem, lock_priority_desc, NULL);
+					}
+				}
+			}
+		}
+		// 디버깅을 잘하고 조건을 잘보자
+		if(lock->holder->wanted_lock != NULL && lock->holder->wanted_lock->max_priority < thread_get_priority()) {
+			donate_priority(lock_holder->wanted_lock);
+		}
+	}
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -247,12 +298,18 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
-	// struct thread *holder_thread = lock->holder;
-	/* 뭐 할래?? */
-	if(lock->holder->donated_priority != PRI_DNTD_INIT) {
-		lock->holder->donated_priority = PRI_DNTD_INIT;
+	list_remove(&lock->elem);
+	struct thread *lock_holder = lock->holder;
+
+	if(lock_holder != NULL) {
+		if (list_empty(&lock_holder->locks)) {
+			lock_holder->donated_priority = PRI_DNTD_INIT;
+		} else {
+			lock_holder -> donated_priority = list_entry(list_front(&lock_holder->locks), struct lock, elem)->max_priority;
+		}
 	}
 
+	lock->max_priority = PRI_DNTD_INIT;
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
 }

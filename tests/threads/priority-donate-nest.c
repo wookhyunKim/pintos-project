@@ -39,12 +39,19 @@ test_priority_donate_nest (void)
   lock_init (&a);
   lock_init (&b);
 
+  // 현재 low 쓰레드가 락 a를 획득
   lock_acquire (&a);
 
+  // 락 구조체에 a와 b를 할당
   locks.a = &a;
   locks.b = &b;
+
+  // medium 우선순위 쓰레드 생생하고 락 구조체 전달
   thread_create ("medium", PRI_DEFAULT + 1, medium_thread_func, &locks);
+  // 컨텍스트 스위칭
   thread_yield ();
+
+  
   msg ("Low thread should have priority %d.  Actual priority: %d.",
        PRI_DEFAULT + 1, thread_get_priority ());
 

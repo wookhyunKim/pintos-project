@@ -229,7 +229,7 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t); // 새로 생성된 스레드를 ready 큐에 추가하여 실행될 수 있도록 만듦
-
+	thread_check_yield();
 	return tid; // 새로 생성된 스레드의 ID를 반환s
 }
 
@@ -241,12 +241,14 @@ sleep_time_asc (const struct list_elem *a_, const struct list_elem *b_, void *au
 	return a->sleep_time < b->sleep_time;
 }
 
+/* multiple2 구현에 필요한 priority_desc 추가 thread_any_priority함수 결과를 비교 해야함 */
 bool
 priority_desc (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED) {
 	const struct thread *a = list_entry (a_, struct thread, elem);
 	const struct thread *b = list_entry (b_, struct thread, elem);
-	return a->priority > b->priority; // 우선순위 높을 수록 우선순위이며 리스트 앞으로 배치
+	return thread_any_priority(a) > thread_any_priority(b); // 우선순위 높을 수록 우선순위이며 리스트 앞으로 배치
 }
+
 
 /* project1 구현: sleep */
 void
@@ -318,10 +320,18 @@ thread_unblock (struct thread *t) {
 	list_insert_ordered(&ready_list, &t->elem, priority_desc, NULL); // ready 리스트에 넣어줌 priority를 기준으로 정렬
 	t->status = THREAD_READY; // t의 상태를 THREAD_READY로 변경
 	// 생성 시 우선 순위를 비교해서 러닝 쓰레드 우선순위보다 새로 생성된 쓰레드의 우선 순위가 높을시 컨텍스트 스위칭(thread_yield)
-	if(thread_current() != idle_thread && thread_get_priority() < t->priority) { // priority를 확인해서 thread_yield
-		thread_yield();
-	}
+	
 	intr_set_level (old_level); // 원래 인터럽트 상태로 복원
+}
+
+// unblock 안에서 일어나던 thread_yield를 함수로 빼준 후 unblock함수 이후에 실행되도록 다 수정
+void thread_check_yield() {
+	if (!list_empty(&ready_list)) {
+		struct thread *t = list_entry(list_front(&ready_list), struct thread, elem);
+		if(thread_current() != idle_thread && thread_get_priority() < t->priority) { // priority를 확인해서 thread_yield
+			thread_yield();
+		}
+	}
 }
 
 /* Returns the name of the running thread. */
@@ -405,10 +415,23 @@ thread_set_priority (int new_priority) {
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
+	/* project1-donate-one: donate받은게 있다면 해당 우선순위 리턴하는 조건문 추가*/
 	if(thread_current()->donated_priority != PRI_DNTD_INIT) {
 		return thread_current()->donated_priority;
 	}
+
 	return thread_current ()->priority;
+}
+
+/* project1-donate-multiple2: 전달받은 쓰레드가 donate받은게 있다면 우선순위 리턴하는 조건문 추가*/
+int
+thread_any_priority (struct thread *t) {
+	/* project1-donate-one: donate받은게 있다면 해당 우선순위 리턴하는 조건문 추가*/
+	if(t->donated_priority != PRI_DNTD_INIT) {
+		return t->donated_priority;
+	}
+
+	return t->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -516,10 +539,13 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *); // 스택포인터의 끝을 구조체의 끝으로 설정
 	t->priority = priority; // 우선순위 설정
 	t->magic = THREAD_MAGIC; // 스레드 magic값을 설정하여 구조체의 유효성을 확인
-	// project 1 : sleep_time 추가했으니 0으로 초기화
+	// project1 : sleep_time 추가했으니 0으로 초기화
 	t->sleep_time = 0;
-	// project 1 : define 대입 
+	// project1 priority-donate-one: define 대입 
 	t->donated_priority = PRI_DNTD_INIT;
+	list_init(&t->locks);
+	// nest
+	t->wanted_lock = NULL;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

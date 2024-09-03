@@ -27,7 +27,8 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
-#define PRI_DNTD_INIT -1
+#define PRI_DNTD_INIT -1				/* 우선 순위 할당 여부 확인용 */
+
 
 /* A kernel thread or user process.
  *
@@ -94,8 +95,16 @@ struct thread {
 	int priority;                       /* Priority. */
 	// project1: sleep_time 추가
 	int64_t sleep_time;                 /* Sleep time(for checking wake time) */
-	// project1: old_priority 추가
-	int donated_priority;         
+	// project1-donate-one: donated_priority 추가
+	int donated_priority;
+	// project1-donate-one: list locks 추가
+	struct  list locks;
+	// nest : 
+	struct lock *wanted_lock;
+	
+
+	
+	    
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 	
@@ -119,6 +128,11 @@ struct thread {
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
+bool sleep_time_asc (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+
+bool priority_desc (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+bool priority_desc1 (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+
 void thread_init (void);
 void thread_start (void);
 
@@ -140,6 +154,7 @@ void thread_yield (void);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+int thread_any_priority(struct thread *t);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
@@ -149,5 +164,6 @@ int thread_get_load_avg (void);
 void do_iret (struct intr_frame *tf);
 void thread_awake(int64_t current_time);
 void thread_sleep(int64_t sleep_time);
+void thread_check_yield(void);
 
 #endif /* threads/thread.h */
