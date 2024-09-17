@@ -149,12 +149,11 @@ page_fault (struct intr_frame *f) {
 	/* Count page faults. */
 	page_fault_cnt++;
 
-	/* If the fault is true fault, show info and exit. */
-	printf ("Page fault at %p: %s error %s page in %s context.\n",
-			fault_addr,
-			not_present ? "not present" : "rights violation",
-			write ? "writing" : "reading",
-			user ? "user" : "kernel");
-	kill (f);
+    exit_syscall(-1); /** Test Case 가 Hardware 수준에서 페이지 폴트를 호출하기 때문에 Test Case 통과를 위해서 exception을 수정해야함. */
+
+    /* If the fault is true fault, show info and exit. */
+    printf("Page fault at %p: %s error %s page in %s context.\n", fault_addr, not_present ? "not present" : "rights violation", write ? "writing" : "reading",
+           user ? "user" : "kernel");
+    kill(f);
 }
 
