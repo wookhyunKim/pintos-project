@@ -96,7 +96,7 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	if(child->exit_status == TID_ERROR)
 		return TID_ERROR;
 
-	return tid; // 부모 프로세스의 리턴값 : 생성한 자식 프로세스의 tid
+	return child->tid; // 부모 프로세스의 리턴값 : 생성한 자식 프로세스의 tid
 }
 
 #ifndef VM
@@ -111,21 +111,31 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	bool writable;
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
+	if (is_kernel_vaddr(va))
+		return true;
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	parent_page = pml4_get_page (parent->pml4, va);
+	if (parent_page == NULL)
+		return false;
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
+	newpage = palloc_get_page(PAL_ZERO);
+	if (newpage == NULL)
+		return false;
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
+	memcpy(newpage, parent_page, PGSIZE);
+	writable = is_writable(pte);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
+		return false;
 	}
 	return true;
 }
@@ -166,11 +176,6 @@ __do_fork (void *aux) {
 		goto error;
 #endif
 
-	/* TODO: Your code goes here.
-	 * TODO: Hint) To duplicate the file object, use `file_duplicate`
-	 * TODO:       in include/filesys/file.h. Note that parent should not return
-	 * TODO:       from the fork() until this function successfully duplicates
-	 * TODO:       the resources of parent.*/
 	if(parent->fd_idx >= FDCOUNT_LIMIT)
 		goto error;
 
@@ -220,7 +225,7 @@ process_exec (void *f_name) {
 
 		// ==== argument parsing ====
 	// argv_list , argc_num 만들기
-	char *argv_list[64]; // pintos에서 command line의 길이에는 128바이트 제한이므로 인자를 담을 배열을 64로 지정
+	char *argv_list[25]; // pintos에서 command line의 길이에는 128바이트 제한이므로 인자를 담을 배열을 64로 지정
 	char *token, *save_ptr;
 	int agrc_num = 0;
 

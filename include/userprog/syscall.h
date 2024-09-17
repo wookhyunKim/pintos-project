@@ -13,7 +13,7 @@ void syscall_init (void);
 void check_address(void *addr);
 void halt_syscall();
 void exit_syscall(int status);
-pid_t fork(const char *thread_name);
+pid_t fork_syscall(const char *thread_name);
 int exec_syscall(const char *cmd_line);
 int wait_syscall(pid_t tid);
 bool create_syscall(const char *file, unsigned initial_size);
