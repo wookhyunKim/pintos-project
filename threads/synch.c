@@ -121,9 +121,7 @@ void sema_up (struct semaphore *sema) {
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),struct thread, elem));
 	}
 	sema->value++;	
-	if(context_switching_possible()){
-		thread_yield();
-	}
+   context_switching_possible();
 	intr_set_level (old_level);
 }
 

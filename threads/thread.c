@@ -195,6 +195,24 @@ tid_t thread_create(const char *name, int priority,
 	init_thread(t, name, priority);
 	tid = t->tid = allocate_tid();
 
+	#ifdef USERPROG
+    /** #Project 2: System Call - 구조체 초기화 */
+    t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+    if (t->fd_table == NULL)
+        return TID_ERROR;
+
+    t->exit_status = 0;  // exit_status 초기화
+
+    t->fd_idx = 3;
+    t->fd_table[0] = STDIN;   // stdin 예약된 자리 (dummy)
+    t->fd_table[1] = STDOUT;  // stdout 예약된 자리 (dummy)
+    t->fd_table[2] = STDERR;  // stderr 예약된 자리 (dummy)
+    /** ---------------------------------------- */
+
+    /** #Project 2: System Call - 현재 스레드의 자식 리스트에 추가 */
+    list_push_back(&thread_current()->child_list, &t->child_elem);
+#endif
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t)kernel_thread;
@@ -208,11 +226,7 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t);
-
-	if (context_switching_possible())
-	{
-		thread_yield();
-	}
+	context_switching_possible();
 
 	return tid;
 }
@@ -331,10 +345,7 @@ void thread_set_priority(int new_priority)
 
 	refresh_priority();
 
-	if (context_switching_possible())
-	{
-		thread_yield();
-	}
+	context_switching_possible();
 }
 
 /* Returns the current thread's priority. */
@@ -453,6 +464,17 @@ init_thread(struct thread *t, const char *name, int priority)
 	// mlfqs 관련 변수
 	t->nice = 0;
 	t->recent_cpu = 0;
+
+	#ifdef USERPROG
+    /** #Project 2: System Call  */
+    t->running_file = NULL;
+
+    list_init(&t->child_list);
+    sema_init(&t->fork_sema, 0);
+    sema_init(&t->exit_sema, 0);
+    sema_init(&t->wait_sema, 0);
+    /** -----------------------  */
+#endif
 
 }
 
@@ -699,16 +721,24 @@ void blocked_to_ready(int64_t current_ticks)
 }
 
 // 실행중인 스레드와 ready_list의 첫번째 스레드의 우선순위를 비교해서 컨텍스트 스위칭이 가능하면 true를 반환한다.
-bool context_switching_possible(void)
+void context_switching_possible(void)
 {
+	if (list_empty(&ready_list))
+        return;
+
 	if (!list_empty(&ready_list) && thread_current() != idle_thread)
 	{
 		if (thread_current()->priority < list_entry(list_front(&ready_list), THREAD, elem)->priority)
 		{
-			return true;
+#ifdef USERPROG /** Project 2: 외부 인터럽트에 의한 thread yield 방지 */
+        if (intr_context())
+            intr_yield_on_return();
+        else
+#endif
+            thread_yield();
 		}
 	}
-	return false;
+
 }
 
 /* donation list에 스레드가 있으면 가장 높은 우선순위 스레드의 우선순위 빌리고, 아니면 우선순위 복귀 */

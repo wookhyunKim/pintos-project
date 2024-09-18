@@ -4,7 +4,9 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -27,6 +29,10 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/** #Project 2: System Call */
+#define FDT_PAGES     3                     // test `multi-oom` 테스트용
+#define FDCOUNT_LIMIT FDT_PAGES * (1 << 9)  // 엔트리가 512개 인 이유: 페이지 크기 4kb / 파일 포인터 8byte
 
 /* A kernel thread or user process.
  *
@@ -108,6 +114,22 @@ typedef struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
+
+	
+    /** #Project 2: System Call */
+    int exit_status;
+
+    int fd_idx;              // 파일 디스크립터 인덱스
+    struct file **fd_table;       // 파일 디스크립터 테이블
+    struct file *running_file;  // 실행중인 파일
+
+    struct intr_frame parent_if;  // 부모 프로세스 if
+    struct list child_list;
+    struct list_elem child_elem;
+
+    struct semaphore fork_sema;  // fork가 완료될 때 signal
+    struct semaphore exit_sema;  // 자식 프로세스 종료 signal
+    struct semaphore wait_sema;  // exit_sema를 기다릴 때 사용
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
@@ -138,7 +160,7 @@ bool comparing_ticks(const struct list_elem *a,const struct list_elem *b, void *
 bool comparing_priority(const struct list_elem *a,const struct list_elem *b, void *aux UNUSED);
 void running_to_blocked (int64_t ticks);
 void blocked_to_ready(int64_t current_ticks);
-bool context_switching_possible(void);
+void context_switching_possible(void);
 void refresh_priority(void);
 void donate_priority(void);
 void remove_from_donation_list(struct lock *lock);
